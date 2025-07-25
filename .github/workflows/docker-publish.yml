@@ -11,7 +11,7 @@ jobs:
         runs-on: ubuntu-latest
         defaults:
           run:
-            working-directory: './Store'
+            working-directory: '.'
         steps:
           - name: 'Checkout GitHub Action'
             uses: actions/checkout@main
@@ -25,5 +25,5 @@ jobs:
 
           - name: 'Build Inventory Image'
             run: |
-              docker build . --tag ghcr.io/Button24/store:latest
-              docker push ghcr.io/Button24/store:latest
+              docker build . --tag ghcr.io/Button24/CraftyProxy:latest
+              docker push ghcr.io/Button24/CraftyProxy:latest
