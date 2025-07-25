@@ -25,5 +25,5 @@ jobs:
 
           - name: 'Build Inventory Image'
             run: |
-              docker build . --tag ghcr.io/Button24/crafty-proxy:latest
-              docker push ghcr.io/Button24/crafty-proxy:latest
+              docker build . --tag ghcr.io/botond24/crafty-proxy:latest
+              docker push ghcr.io/botond24/crafty-proxy:latest
