@@ -8,7 +8,7 @@ WORKDIR /app
 # Download Go modules
 
 # Build
-RUN CGO_ENABLED=0 GOOS=linux go install github.com/Botond24/CraftyProxy@latest
+RUN GOBIN=/ CGO_ENABLED=0 GOOS=linux go install github.com/Botond24/CraftyProxy@latest
 
 # expose enough ports for 10 servers
 EXPOSE 25565-25575
