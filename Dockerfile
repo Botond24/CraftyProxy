@@ -14,7 +14,7 @@ RUN GOBIN=/ CGO_ENABLED=0 GOOS=linux go install github.com/Botond24/CraftyProxy@
 EXPOSE 25565-25575
 
 # Run
-CMD ["CraftyProxy"]
+CMD ["/CraftyProxy"]
 
 LABEL org.opencontainers.image.authors="button@bttn.dev"
 LABEL org.opencontainers.image.source="https://github.com/Button24/CraftyProxy"
