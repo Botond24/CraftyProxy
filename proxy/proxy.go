@@ -91,7 +91,7 @@ func startingReply(s *crafty.Server, conn net.Conn) {
 	}
 
 	srv := server.Server{
-		Logger:          nil,
+		Logger:          s.Logger,
 		ListPingHandler: serverInfo,
 		LoginHandler: &LoginDenier{
 			Server: s,
