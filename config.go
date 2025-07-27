@@ -6,7 +6,7 @@ import (
 )
 
 type Config struct {
-	Arrd        string
+	Addr        string
 	CraftyAddr  string
 	Port        int
 	Key         string
