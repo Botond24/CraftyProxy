@@ -21,8 +21,8 @@ var (
 	messageOff = "The server is stopped, please ask the owner to start it up"
 )
 
-func Handle(s *crafty.Server) {
-	listen, err := net.Listen("tcp", ":"+strconv.Itoa(s.OutPort))
+func Handle(s *crafty.Server, addr string) {
+	listen, err := net.Listen("tcp", addr+":"+strconv.Itoa(s.OutPort))
 	if err != nil {
 		log.Fatalf("Error starting proxy server: %s\n", err)
 	}
