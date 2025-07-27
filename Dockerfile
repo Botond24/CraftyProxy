@@ -8,13 +8,13 @@ WORKDIR /app
 # Download Go modules
 
 # Build
-RUN CGO_ENABLED=0 GOOS=linux go build github.com/Botond24/CraftyProxy -o /crafty-proxy
+RUN CGO_ENABLED=0 GOOS=linux go install github.com/Botond24/CraftyProxy
 
 # expose enough ports for 10 servers
 EXPOSE 25565-25575
 
 # Run
-CMD ["/crafty-proxy"]
+CMD ["CraftyProxy"]
 
 LABEL org.opencontainers.image.authors="button@bttn.dev"
 LABEL org.opencontainers.image.source="https://github.com/Button24/CraftyProxy"
