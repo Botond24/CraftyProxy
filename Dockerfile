@@ -29,3 +29,4 @@ EXPOSE 25565
 CMD ["/crafty-proxy"]
 
 LABEL org.opencontainers.image.authors="button@bttn.dev"
+LABEL org.opencontainers.image.source="https://github.com/Button24/CraftyProxy"

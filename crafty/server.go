@@ -20,18 +20,19 @@ type Server struct {
 	parent    *Crafty
 	InPort    int
 	OutPort   int
-	autoOn    bool
+	AutoOn    bool
 	autoOff   bool
 	id        string
 	Logger    *log.Logger
 	Address   string
 	players   int
 	stopTimer *time.Timer
+	State     string
 }
 
 func NewServer(parent *Crafty, srv jsonServer) *Server {
 	s := new(Server)
-	s.autoOn = false
+	s.AutoOn = false
 	s.autoOff = false
 	s.parent = parent
 	s.InPort = srv.Port - 2000
@@ -40,68 +41,66 @@ func NewServer(parent *Crafty, srv jsonServer) *Server {
 	s.players = 0
 	s.Address = srv.Ip
 	if srv.Ip == "127.0.0.1" {
-		s.Address = strings.ReplaceAll(parent.url, "https://", "")
-		s.Address = strings.ReplaceAll(s.Address, "/", "")
+		s.Address = parent.ip
 	}
 	options := strings.Split(srv.Name, "$")
 	if len(options) > 1 {
 		s.Name = strings.TrimSpace(options[0])
 		options = strings.Split(options[1], "&")
 	}
-	s.Logger = log.New(os.Stdout, "crafty("+parent.url+") | "+s.Name+": ", 0)
+	s.Logger = log.New(os.Stdout, "crafty("+parent.ip+") | "+s.Name+": ", 0)
 
 	if slices.Contains(options, "player-start") {
-		s.autoOn = true
+		s.AutoOn = true
 	}
 	if slices.Contains(options, "player-stop") {
 		s.autoOff = true
 	}
-	if s.autoOn || s.autoOff {
+	if s.AutoOn || s.autoOff {
 		s.updatePort()
 	}
 	s.stopTimer = time.AfterFunc(parent.StopTimeout*time.Minute, func() {
 		s.Stop()
 	})
 	s.stopTimer.Stop()
-
+	s.State = "unknown"
 	return s
 }
 
 func (s *Server) String() string {
 	return s.Name + " (" + strconv.Itoa(s.OutPort) + "->" + strconv.Itoa(s.InPort) + ")" + "\n" +
-		"\tAuto on: " + strconv.FormatBool(s.autoOn) + "\n" +
+		"\tAuto on: " + strconv.FormatBool(s.AutoOn) + "\n" +
 		"\tAuto off: " + strconv.FormatBool(s.autoOff) + "\n" +
 		"\tID: " + s.id
 }
 
 func (s *Server) Start() {
-	post, err := s.parent.Post("/api/v2/servers/"+s.id+"/start_server", []byte{})
+	post, err := s.parent.Post("/api/v2/servers/"+s.id+"/action/start_server", []byte{})
 	if err != nil {
 		s.Logger.Println("Can't start server: " + err.Error())
 	}
 	if post.StatusCode != 200 {
 		s.Logger.Println("Can't start server: " + post.Status)
+		return
 	}
+	s.Logger.Println("Started server")
+	s.State = "starting"
 }
 
 func (s *Server) Stop() {
-	post, err := s.parent.Post("/api/v2/servers/"+s.id+"/stop_server", []byte{})
+	post, err := s.parent.Post("/api/v2/servers/"+s.id+"/action/stop_server", []byte{})
 	if err != nil {
 		s.Logger.Println("Can't stop server: " + err.Error())
 	}
 	if post.StatusCode != 200 {
 		s.Logger.Println("Can't stop server: " + post.Status)
+		return
 	}
+	s.Logger.Println("Stopped server")
+	s.State = "stopping"
 }
 
 func (s *Server) updatePort() {
-	patch, err := s.parent.Patch("/api/v2/servers/"+s.id, []byte("{\"server_port\": "+strconv.Itoa(s.InPort)+"}"))
-	if err != nil {
-		s.Logger.Println("Can't update port: " + err.Error())
-	}
-	if patch.StatusCode != 200 {
-		s.Logger.Println("Can't update port: " + patch.Status)
-	}
 	path := "servers/" + s.id + "/server.properties"
 	props := "{\"path\":\"" + path + "\"}"
 	post, err := s.parent.Post("/api/v2/servers/"+s.id+"/files", []byte(props))
@@ -111,7 +110,7 @@ func (s *Server) updatePort() {
 	body := defaultServerProperties
 	if post.StatusCode != 200 {
 		s.Logger.Println("server.properties not found, creating...")
-		s.createProperties(path)
+		s.createProperties()
 	} else {
 		defer post.Body.Close()
 		postBody, err := io.ReadAll(post.Body)
@@ -127,7 +126,7 @@ func (s *Server) updatePort() {
 	body = strings.ReplaceAll(body, "25565", strconv.Itoa(s.InPort))
 	body = "{\"path\":\"" + path + "\",\"contents\":\"" + strings.ReplaceAll(
 		strings.ReplaceAll(body, "\n", "\\n"), "\\:", "\\\\:") + "\"}"
-	patch, err = s.parent.Patch("/api/v2/servers/"+s.id+"/files", []byte(body))
+	patch, err := s.parent.Patch("/api/v2/servers/"+s.id+"/files", []byte(body))
 	if err != nil {
 		s.Logger.Println("Can't update server.properties: " + err.Error())
 	}
@@ -143,7 +142,7 @@ func (s *Server) updatePort() {
 
 }
 
-func (s *Server) createProperties(path string) {
+func (s *Server) createProperties() {
 	body := "{\"parent\":\"servers/" + s.id + "\",\"name\": \"server.property\",\"directory\": false}"
 	put, err := s.parent.Put("/api/v2/servers/"+s.id+"/files/servers/"+s.id+"/server.properties", []byte(body))
 	if err != nil {
@@ -172,11 +171,18 @@ func (s *Server) IsRunning() bool {
 		s.Logger.Println("Can't extract JSON to object: " + err.Error() + "\n")
 		return false
 	}
-	return stats["data"].(map[string]interface{})["running"].(bool)
+	isrunning := stats["data"].(map[string]interface{})["running"].(bool)
+	if isrunning {
+		s.State = "running"
+	} else {
+		s.State = "stopped"
+	}
+	return isrunning
 }
 
 func (s *Server) IncrementPlayers() {
 	s.players++
+	s.Logger.Println("Players: " + strconv.Itoa(s.players))
 	if s.autoOff {
 		s.stopTimer.Stop()
 	}
@@ -184,9 +190,11 @@ func (s *Server) IncrementPlayers() {
 
 func (s *Server) DecrementPlayers() {
 	s.players--
+	s.Logger.Println("Players: " + strconv.Itoa(s.players))
 	if s.players <= 0 {
 		s.players = 0
 		if s.autoOff {
+			s.Logger.Println("Stopping server in " + strconv.Itoa(int(s.parent.StopTimeout)) + " minutes")
 			s.stopTimer.Reset(s.parent.StopTimeout * time.Minute)
 		}
 

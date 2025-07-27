@@ -12,6 +12,7 @@ import (
 )
 
 type Crafty struct {
+	ip          string
 	url         string
 	Key         string
 	Servers     []Server
@@ -37,6 +38,7 @@ func New(address string, port int, key string, timeout int) *Crafty {
 	c.Servers = []Server{}
 	c.logger = log.New(os.Stdout, "crafty("+address+"): ", 0)
 	c.StopTimeout = time.Duration(timeout)
+	c.ip = address
 	return c
 }
 
@@ -102,7 +104,7 @@ func (c *Crafty) GetServers() {
 		c.Servers = append(c.Servers, *s)
 	}
 	c.Servers = filter(c.Servers, func(server Server) bool {
-		return server.autoOn || server.autoOff
+		return server.AutoOn || server.autoOff
 	})
 	c.logger.Println("Found " + strconv.Itoa(len(c.Servers)) + " servers")
 }
