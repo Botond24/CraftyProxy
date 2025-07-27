@@ -1,9 +1,9 @@
 package main
 
 import (
-	"CraftyProxy/crafty"
-	"CraftyProxy/proxy"
 	"crypto/tls"
+	"github.com/botond24/crafty-proxy/crafty"
+	"github.com/botond24/crafty-proxy/proxy"
 	"net/http"
 	"sync"
 )
@@ -18,7 +18,7 @@ func main() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			proxy.Handle(&server,conf.Addr)
+			proxy.Handle(&server, conf.Addr)
 		}()
 	}
 	wg.Wait()

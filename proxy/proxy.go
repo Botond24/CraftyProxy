@@ -1,7 +1,6 @@
 package proxy
 
 import (
-	"CraftyProxy/crafty"
 	"errors"
 	"github.com/Tnze/go-mc/chat"
 	"github.com/Tnze/go-mc/data/packetid"
@@ -9,6 +8,7 @@ import (
 	pk "github.com/Tnze/go-mc/net/packet"
 	"github.com/Tnze/go-mc/server"
 	"github.com/Tnze/go-mc/yggdrasil/user"
+	"github.com/botond24/crafty-proxy/crafty"
 	"github.com/google/uuid"
 	"io"
 	"log"
