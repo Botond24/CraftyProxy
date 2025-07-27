@@ -2,13 +2,13 @@ package proxy
 
 import (
 	"errors"
+	"github.com/Botond24/CraftyProxy/crafty"
 	"github.com/Tnze/go-mc/chat"
 	"github.com/Tnze/go-mc/data/packetid"
 	mcnet "github.com/Tnze/go-mc/net"
 	pk "github.com/Tnze/go-mc/net/packet"
 	"github.com/Tnze/go-mc/server"
 	"github.com/Tnze/go-mc/yggdrasil/user"
-	"github.com/botond24/CraftyProxy/crafty"
 	"github.com/google/uuid"
 	"io"
 	"log"
