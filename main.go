@@ -2,8 +2,8 @@ package main
 
 import (
 	"crypto/tls"
-	"github.com/botond24/crafty-proxy/crafty"
-	"github.com/botond24/crafty-proxy/proxy"
+	"github.com/botond24/CraftyProxy/crafty"
+	"github.com/botond24/CraftyProxy/proxy"
 	"net/http"
 	"sync"
 )

@@ -1,4 +1,4 @@
-module github.com/botond24/crafty-proxy
+module github.com/botond24/CraftyProxy
 
 go 1.24
 

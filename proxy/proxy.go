@@ -8,7 +8,7 @@ import (
 	pk "github.com/Tnze/go-mc/net/packet"
 	"github.com/Tnze/go-mc/server"
 	"github.com/Tnze/go-mc/yggdrasil/user"
-	"github.com/botond24/crafty-proxy/crafty"
+	"github.com/botond24/CraftyProxy/crafty"
 	"github.com/google/uuid"
 	"io"
 	"log"
