@@ -6,10 +6,11 @@ import (
 )
 
 type Config struct {
-	Addr    string
-	Port    int
-	Key     string
-	Timeout int
+	Arrd        string
+	CraftyAddr  string
+	Port        int
+	Key         string
+	Timeout     int
 }
 
 var config *Config
@@ -24,7 +25,7 @@ func getConfig() Config {
 		panic("ProxyKey is not set, aborting...")
 	}
 	config.Addr = os.Getenv("ProxyAddr")
-	config.Addr = os.Getenv("CraftyAddr")
+	config.CraftyAddr = os.Getenv("CraftyAddr")
 	if config.Addr == "" {
 		panic("ProxyAddr is not set, aborting...")
 	}
