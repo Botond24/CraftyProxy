@@ -48,7 +48,7 @@ func NewServer(parent *Crafty, srv jsonServer) *Server {
 		s.Name = strings.TrimSpace(options[0])
 		options = strings.Split(options[1], "&")
 	}
-	s.Logger = log.New(os.Stdout, "crafty("+parent.ip+") | "+s.Name+": ", 0)
+	s.Logger = log.New(os.Stdout, "crafty("+parent.ip+") | "+s.Name+": ", log.Ldate|log.Ltime)
 
 	if slices.Contains(options, "player-start") {
 		s.AutoOn = true

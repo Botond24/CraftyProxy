@@ -36,7 +36,7 @@ func New(address string, port int, key string, timeout int) *Crafty {
 	c.url = "https://" + address + ":" + strconv.Itoa(port)
 	c.Key = key
 	c.Servers = []Server{}
-	c.logger = log.New(os.Stdout, "crafty("+address+"): ", 0)
+	c.logger = log.New(os.Stdout, "crafty("+address+"): ", log.Ldate|log.Ltime)
 	c.StopTimeout = time.Duration(timeout)
 	c.ip = address
 	return c
