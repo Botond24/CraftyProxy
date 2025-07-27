@@ -22,12 +22,12 @@ func getConfig() Config {
 	config = new(Config)
 	config.Key = os.Getenv("CraftyKey")
 	if config.Key == "" {
-		panic("ProxyKey is not set, aborting...")
+		panic("CraftyKey is not set, aborting...")
 	}
 	config.Addr = os.Getenv("ProxyAddr")
 	config.CraftyAddr = os.Getenv("CraftyAddr")
-	if config.Addr == "" {
-		panic("ProxyAddr is not set, aborting...")
+	if config.CraftyAddr == "" {
+		panic("CraftyAddr is not set, aborting...")
 	}
 	var err error
 	config.Port, err = strconv.Atoi(os.Getenv("ProxyPort"))
