@@ -122,8 +122,13 @@ func (s *Server) updatePort() {
 		body = file.Data
 	}
 
-	body = strings.ReplaceAll(body, strconv.Itoa(s.OutPort), strconv.Itoa(s.InPort))
-	body = strings.ReplaceAll(body, "25565", strconv.Itoa(s.InPort))
+	lines := strings.Split(body, "\n")
+	for i, line := range lines {
+		if strings.Contains(line, "server-port=") {
+			lines[i] = "server-port=" + strconv.Itoa(s.InPort)
+		}
+	}
+	body = strings.Join(lines, "\n")
 	body = "{\"path\":\"" + path + "\",\"contents\":\"" + strings.ReplaceAll(
 		strings.ReplaceAll(body, "\n", "\\n"), "\\:", "\\\\:") + "\"}"
 	patch, err := s.parent.Patch("/api/v2/servers/"+s.id+"/files", []byte(body))
