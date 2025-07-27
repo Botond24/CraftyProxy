@@ -19,11 +19,12 @@ func getConfig() Config {
 		return *config
 	}
 	config = new(Config)
-	config.Key = os.Getenv("ProxyKey")
+	config.Key = os.Getenv("CraftyKey")
 	if config.Key == "" {
 		panic("ProxyKey is not set, aborting...")
 	}
 	config.Addr = os.Getenv("ProxyAddr")
+	config.Addr = os.Getenv("CraftyAddr")
 	if config.Addr == "" {
 		panic("ProxyAddr is not set, aborting...")
 	}
