@@ -1,14 +1,20 @@
 # syntax=docker/dockerfile:1
 
-FROM golang:1.24
+FROM golang:1.24 as build
 
 # Set destination for COPY
-WORKDIR /app
+WORKDIR /src
 
+COPY . .
+RUN go mod download
+RUN go build
+
+FROM alpine as run
 # Download Go modules
-
 # Build
-RUN GOBIN=/ CGO_ENABLED=0 GOOS=linux go install github.com/Botond24/CraftyProxy@latest
+COPY --from=build /src/CraftyProxy /app/CraftyProxy
+WORKDIR /app
+RUN chmod +x ./CraftyProxy
 
 # expose enough ports for 10 servers
 EXPOSE 25565-25575
