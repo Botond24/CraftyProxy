@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Tnze/go-mc/bot"
 )
 
 type fileResponse struct {
@@ -16,74 +18,103 @@ type fileResponse struct {
 }
 
 type Server struct {
-	Name      string
-	parent    *Crafty
-	InPort    int
-	OutPort   int
-	AutoOn    bool
-	autoOff   bool
-	id        string
-	Logger    *log.Logger
-	Address   string
-	players   int
-	stopTimer *time.Timer
-	State     string
+	Name       string
+	parent     *Crafty
+	InPort     uint16
+	OutPort    uint16
+	AutoOn     bool
+	AutoOff    bool
+	ChangePort bool
+	VoicePort  int
+	id         string
+	Logger     *log.Logger
+	Address    string
+	players    int
+	stopTimer  *time.Timer
+	State      string
+	Handled    bool
 }
 
 func NewServer(parent *Crafty, srv jsonServer) *Server {
 	s := new(Server)
-	s.AutoOn = false
-	s.autoOff = false
 	s.parent = parent
+
+	s.AutoOn = false
+	s.AutoOff = false
+	s.ChangePort = false
+	s.VoicePort = 0
+
 	s.InPort = srv.Port - 2000
 	s.OutPort = srv.Port
+
 	s.id = srv.Id
 	s.players = 0
 	s.Address = srv.Ip
 	if srv.Ip == "127.0.0.1" {
 		s.Address = parent.ip
 	}
-	options := strings.Split(srv.Name, "$")
-	if len(options) > 1 {
-		s.Name = strings.TrimSpace(options[0])
-		options = strings.Split(options[1], "&")
-	}
+	var options []string
+	s.Name, options = s.FixName(srv.Name)
 	s.Logger = log.New(os.Stdout, "crafty("+parent.ip+") | "+s.Name+": ", log.Ldate|log.Ltime)
 
 	if slices.Contains(options, "player-start") {
 		s.AutoOn = true
 	}
 	if slices.Contains(options, "player-stop") {
-		s.autoOff = true
+		s.AutoOff = true
 	}
-	if s.AutoOn || s.autoOff {
-		s.updatePort()
+	if slices.Contains(options, "update-port") {
+		s.ChangePort = true
+	}
+	if slices.ContainsFunc(options, containsVoice) {
+		idx := slices.IndexFunc(options, containsVoice)
+		if idx == -1 {
+			s.Logger.Fatalf("Invalid options: %v", options)
+		}
+		l := strings.Split(options[idx], "=")
+		p, err := strconv.Atoi(l[1])
+		if err != nil {
+			s.Logger.Fatalf("Invalid options: %v", options)
+		}
+		s.VoicePort = p
+	}
+	if s.AutoOn || s.AutoOff {
+		if s.ChangePort {
+			s.updatePort()
+		} else {
+			s.InPort = s.OutPort
+		}
 	}
 	s.stopTimer = time.AfterFunc(parent.StopTimeout*time.Minute, func() {
 		s.Stop()
 	})
 	s.stopTimer.Stop()
-	s.State = "unknown"
+	s.IsRunning()
 	return s
+}
+func containsVoice(str string) bool {
+	return strings.Contains(str, "voice-port")
 }
 
 func (s *Server) String() string {
-	return s.Name + " (" + strconv.Itoa(s.OutPort) + "->" + strconv.Itoa(s.InPort) + ")" + "\n" +
+	return s.Name + " (" + strconv.Itoa(int(s.OutPort)) + "->" + strconv.Itoa(int(s.InPort)) + ")" + "\n" +
 		"\tAuto on: " + strconv.FormatBool(s.AutoOn) + "\n" +
-		"\tAuto off: " + strconv.FormatBool(s.autoOff) + "\n" +
+		"\tAuto off: " + strconv.FormatBool(s.AutoOff) + "\n" +
+		"\tPorts: " + strconv.Itoa(int(s.InPort)) + " -> " + strconv.Itoa(int(s.OutPort)) + "\n" +
 		"\tID: " + s.id
 }
 
-func (s *Server) Start() {
+func (s *Server) Start(name string) {
 	post, err := s.parent.Post("/api/v2/servers/"+s.id+"/action/start_server", []byte{})
 	if err != nil {
 		s.Logger.Println("Can't start server: " + err.Error())
+		return
 	}
 	if post.StatusCode != 200 {
 		s.Logger.Println("Can't start server: " + post.Status)
 		return
 	}
-	s.Logger.Println("Started server")
+	s.Logger.Println("Server started by " + name)
 	s.State = "starting"
 }
 
@@ -91,6 +122,7 @@ func (s *Server) Stop() {
 	post, err := s.parent.Post("/api/v2/servers/"+s.id+"/action/stop_server", []byte{})
 	if err != nil {
 		s.Logger.Println("Can't stop server: " + err.Error())
+		return
 	}
 	if post.StatusCode != 200 {
 		s.Logger.Println("Can't stop server: " + post.Status)
@@ -106,6 +138,7 @@ func (s *Server) updatePort() {
 	post, err := s.parent.Post("/api/v2/servers/"+s.id+"/files", []byte(props))
 	if err != nil {
 		s.Logger.Println("Can't update port: " + err.Error())
+		return
 	}
 	body := defaultServerProperties
 	if post.StatusCode != 200 {
@@ -116,6 +149,7 @@ func (s *Server) updatePort() {
 		postBody, err := io.ReadAll(post.Body)
 		if err != nil {
 			s.Logger.Println("Can't read response body: " + err.Error())
+			return
 		}
 		var file fileResponse
 		json.Unmarshal(postBody, &file)
@@ -125,7 +159,7 @@ func (s *Server) updatePort() {
 	lines := strings.Split(body, "\n")
 	for i, line := range lines {
 		if strings.Contains(line, "server-port=") {
-			lines[i] = "server-port=" + strconv.Itoa(s.InPort)
+			lines[i] = "server-port=" + strconv.Itoa(int(s.InPort))
 		}
 	}
 	body = strings.Join(lines, "\n")
@@ -134,6 +168,7 @@ func (s *Server) updatePort() {
 	patch, err := s.parent.Patch("/api/v2/servers/"+s.id+"/files", []byte(body))
 	if err != nil {
 		s.Logger.Println("Can't update server.properties: " + err.Error())
+		return
 	}
 	if patch.StatusCode != 200 {
 		s.Logger.Println("Can't update server.properties: " + patch.Status)
@@ -152,6 +187,7 @@ func (s *Server) createProperties() {
 	put, err := s.parent.Put("/api/v2/servers/"+s.id+"/files/servers/"+s.id+"/server.properties", []byte(body))
 	if err != nil {
 		s.Logger.Println("Can't create server.properties: " + err.Error() + "\n")
+		return
 	}
 	if put.StatusCode != 200 {
 		s.Logger.Println("Can't create server.properties: " + put.Status + "\n")
@@ -179,6 +215,7 @@ func (s *Server) IsRunning() bool {
 	isrunning := stats["data"].(map[string]interface{})["running"].(bool)
 	if isrunning {
 		s.State = "running"
+		return s.checkPing()
 	} else {
 		s.State = "stopped"
 	}
@@ -188,7 +225,7 @@ func (s *Server) IsRunning() bool {
 func (s *Server) IncrementPlayers() {
 	s.players++
 	s.Logger.Println("Players: " + strconv.Itoa(s.players))
-	if s.autoOff {
+	if s.AutoOff {
 		s.stopTimer.Stop()
 	}
 }
@@ -198,12 +235,38 @@ func (s *Server) DecrementPlayers() {
 	s.Logger.Println("Players: " + strconv.Itoa(s.players))
 	if s.players <= 0 {
 		s.players = 0
-		if s.autoOff {
+		if s.AutoOff {
 			s.Logger.Println("Stopping server in " + strconv.Itoa(int(s.parent.StopTimeout)) + " minutes")
 			s.stopTimer.Reset(s.parent.StopTimeout * time.Minute)
 		}
 
 	}
+}
+
+func (s *Server) Remove() {
+	s.parent.Servers = slices.DeleteFunc(s.parent.Servers, func(server Server) bool {
+		return server.id == s.id
+	})
+}
+
+func (s Server) FixName(inname string) (name string, options []string) {
+	options = strings.Split(inname, "$")
+	if len(options) > 1 {
+		name = strings.TrimSpace(options[0])
+		options = strings.Split(options[1], "&")
+	} else {
+		name = inname
+		options = []string{}
+	}
+	return
+}
+
+func (s *Server) checkPing() bool {
+	_, _, err := bot.PingAndList(s.Address + ":" + strconv.Itoa(int(s.InPort)))
+	if err != nil {
+		return false
+	}
+	return true
 }
 
 const (

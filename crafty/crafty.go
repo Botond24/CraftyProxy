@@ -1,14 +1,20 @@
 package crafty
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 type Crafty struct {
@@ -24,11 +30,16 @@ type serversResponse struct {
 	Data []jsonServer `json:"data"`
 }
 
+type wsResponse struct {
+	Event string      `json:"event"`
+	Data  interface{} `json:"data"`
+}
+
 type jsonServer struct {
 	Name string `json:"server_name"`
 	Id   string `json:"server_id"`
 	Ip   string `json:"server_ip"`
-	Port int    `json:"server_port"`
+	Port uint16 `json:"server_port"`
 }
 
 func New(address string, port int, key string, timeout int) *Crafty {
@@ -104,9 +115,76 @@ func (c *Crafty) GetServers() {
 		c.Servers = append(c.Servers, *s)
 	}
 	c.Servers = filter(c.Servers, func(server Server) bool {
-		return server.AutoOn || server.autoOff
+		return server.AutoOn || server.AutoOff
 	})
 	c.logger.Println("Found " + strconv.Itoa(len(c.Servers)) + " servers")
+}
+
+func (c *Crafty) ListenWs(wg *sync.WaitGroup, cb func(*Server, string)) {
+	wsUrl := strings.ReplaceAll(c.url, "https://", "wss://") + "/ws"
+	websocket.DefaultDialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	u, err := url.Parse(wsUrl)
+	if err != nil {
+		c.logger.Println("Can't parse ws url: " + err.Error() + "\n")
+	}
+	websocket.DefaultDialer.Jar.SetCookies(u, []*http.Cookie{
+		{Name: "token", Value: c.Key}})
+	conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	if err != nil {
+		panic("Can't connect to ws: " + err.Error() + "\n")
+	}
+	defer conn.Close()
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, os.Interrupt)
+
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		for {
+			_, message, err := conn.ReadMessage()
+			if err != nil {
+				log.Println("read:", err)
+				return
+			}
+			log.Printf("recv: %s", message)
+			var wsMessage wsResponse
+			json.Unmarshal(message, &wsMessage)
+			if wsMessage.Event == "update" {
+				c.GetServers()
+				servers := filter(c.Servers, func(server Server) bool {
+					return !server.Handled
+				})
+				c.logger.Println("Found " + strconv.Itoa(len(servers)) + " new servers")
+				for _, server := range servers {
+					wg.Add(1)
+					go func() {
+						defer wg.Done()
+						cb(&server, c.ip)
+					}()
+				}
+			}
+
+		}
+	}()
+
+	for {
+		select {
+		case <-done:
+			return
+		case <-interrupt:
+			log.Println("interrupt")
+			if err := conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "")); err != nil {
+				log.Println("write close:", err)
+				return
+			}
+			select {
+			case <-done:
+			case <-time.After(time.Second):
+			}
+			return
+		}
+	}
 }
 
 func filter[T any](s []T, predicate func(T) bool) []T {

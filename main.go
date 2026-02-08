@@ -2,10 +2,11 @@ package main
 
 import (
 	"crypto/tls"
-	"github.com/Botond24/CraftyProxy/crafty"
-	"github.com/Botond24/CraftyProxy/proxy"
 	"net/http"
 	"sync"
+
+	"github.com/Botond24/CraftyProxy/crafty"
+	"github.com/Botond24/CraftyProxy/proxy"
 )
 
 func main() {
@@ -14,6 +15,7 @@ func main() {
 	c := crafty.New(conf.CraftyAddr, conf.Port, conf.Key, conf.Timeout)
 	c.GetServers()
 	var wg sync.WaitGroup
+	go c.ListenWs(&wg, proxy.Handle)
 	for _, server := range c.Servers {
 		wg.Add(1)
 		go func() {

@@ -5,7 +5,7 @@ permissions:
 on:
   push:
     branches:
-      - master
+      - "*"
   workflow_dispatch:
 
 jobs:
@@ -15,6 +15,11 @@ jobs:
           run:
             working-directory: '.'
         steps:
+          - name: 'Extract branch name'
+            shell: bash
+            run: echo "branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_OUTPUT
+            id: extract_branch
+
           - name: 'Checkout GitHub Action'
             uses: actions/checkout@main
 
@@ -25,7 +30,14 @@ jobs:
               username: ${{github.actor}}
               password: ${{secrets.GITHUB_TOKEN}}
 
-          - name: 'Build Inventory Image'
+          - name: 'Build Master Inventory Image'
+            if: ${{steps.extract_branch.outputs.branch == 'master'}}
             run: |
               docker build . --tag ghcr.io/botond24/crafty-proxy:latest
               docker push ghcr.io/botond24/crafty-proxy:latest
+
+          - name: 'Build Other Inventory Image'
+            if: ${{steps.extract_branch.outputs.branch != 'master'}}
+            run: |
+              docker build . --tag ghcr.io/botond24/crafty-proxy:${{steps.extract_branch.outputs.branch}}
+              docker push ghcr.io/botond24/crafty-proxy:${{steps.extract_branch.outputs.branch}}

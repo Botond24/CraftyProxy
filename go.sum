@@ -2,3 +2,5 @@ github.com/Tnze/go-mc v1.20.3-0.20241224032005-539b4a3a7f03 h1:DTfuZLjn/C0Q7IWk6
 github.com/Tnze/go-mc v1.20.3-0.20241224032005-539b4a3a7f03/go.mod h1:vp949nHNUK5KVwSuadpN1vp7c1zvkPEniM08PQv1FcY=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
+github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg=
+github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
