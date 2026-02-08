@@ -216,10 +216,9 @@ func (s *Server) IsRunning() bool {
 	if isrunning {
 		s.State = "running"
 		return s.checkPing()
-	} else {
-		s.State = "stopped"
 	}
-	return isrunning
+	s.State = "stopped"
+	return false
 }
 
 func (s *Server) IncrementPlayers() {
@@ -249,7 +248,7 @@ func (s *Server) Remove() {
 	})
 }
 
-func (s Server) FixName(inname string) (name string, options []string) {
+func (s *Server) FixName(inname string) (name string, options []string) {
 	options = strings.Split(inname, "$")
 	if len(options) > 1 {
 		name = strings.TrimSpace(options[0])
