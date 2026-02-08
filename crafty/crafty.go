@@ -149,7 +149,10 @@ func (c *Crafty) ListenWs(wg *sync.WaitGroup, cb func(*Server, string)) {
 			}
 			log.Printf("recv: %s", message)
 			var wsMessage wsResponse
-			json.Unmarshal(message, &wsMessage)
+			err = json.Unmarshal(message, &wsMessage)
+			if err != nil {
+				log.Fatalf(err.Error())
+			}
 			if wsMessage.Event == "update" {
 				c.GetServers()
 				servers := filter(c.Servers, func(server Server) bool {
