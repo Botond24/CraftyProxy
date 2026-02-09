@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"os"
 	"os/signal"
@@ -126,6 +127,14 @@ func (c *Crafty) ListenWs(wg *sync.WaitGroup, cb func(*Server, string)) {
 	u, err := url.Parse(wsUrl)
 	if err != nil {
 		c.logger.Println("Can't parse ws url: " + err.Error() + "\n")
+		return
+	}
+	if websocket.DefaultDialer.Jar == nil {
+		websocket.DefaultDialer.Jar, err = cookiejar.New(nil)
+		if err != nil {
+			c.logger.Println("Can't create cookie jar: " + err.Error() + "\n")
+			return
+		}
 	}
 	websocket.DefaultDialer.Jar.SetCookies(u, []*http.Cookie{
 		{Name: "token", Value: c.Key}})
@@ -133,7 +142,6 @@ func (c *Crafty) ListenWs(wg *sync.WaitGroup, cb func(*Server, string)) {
 	if err != nil {
 		panic("Can't connect to ws: " + err.Error() + "\n")
 	}
-	defer conn.Close()
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 
@@ -144,7 +152,7 @@ func (c *Crafty) ListenWs(wg *sync.WaitGroup, cb func(*Server, string)) {
 		for {
 			_, message, err := conn.ReadMessage()
 			if err != nil {
-				log.Println("read:", err)
+
 				return
 			}
 			log.Printf("recv: %s", message)
@@ -152,6 +160,7 @@ func (c *Crafty) ListenWs(wg *sync.WaitGroup, cb func(*Server, string)) {
 			err = json.Unmarshal(message, &wsMessage)
 			if err != nil {
 				log.Fatalf(err.Error())
+				return
 			}
 			if wsMessage.Event == "update" {
 				c.GetServers()
@@ -171,20 +180,20 @@ func (c *Crafty) ListenWs(wg *sync.WaitGroup, cb func(*Server, string)) {
 		}
 	}()
 
-	for {
+	select {
+	case <-done:
+		conn.Close()
+		return
+	case <-interrupt:
+		log.Println("interrupt")
+		if err := conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "")); err != nil {
+			log.Println("write close:", err)
+			return
+		}
 		select {
 		case <-done:
-			return
-		case <-interrupt:
-			log.Println("interrupt")
-			if err := conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "")); err != nil {
-				log.Println("write close:", err)
-				return
-			}
-			select {
-			case <-done:
-			case <-time.After(time.Second):
-			}
+		case <-time.After(time.Second):
+			conn.Close()
 			return
 		}
 	}

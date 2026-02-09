@@ -135,7 +135,9 @@ func startingReply(s *crafty.Server, conn net.Conn) {
 	if s.AutoOn {
 		pingInfo = server.NewPingInfo(s.Name, 0, chat.Text("The server is stopped, you can start it by joining"), nil)
 	}
-
+	if s.State == "starting" {
+		pingInfo = server.NewPingInfo(s.Name, 0, chat.Text("The server is starting, please wait"), nil)
+	}
 	serverInfo := ServerInfo{
 		PlayerList: playerList,
 		PingInfo:   pingInfo,

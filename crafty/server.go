@@ -105,6 +105,9 @@ func (s *Server) String() string {
 }
 
 func (s *Server) Start(name string) {
+	if s.State != "stopped" {
+		return
+	}
 	post, err := s.parent.Post("/api/v2/servers/"+s.id+"/action/start_server", []byte{})
 	if err != nil {
 		s.Logger.Println("Can't start server: " + err.Error())
@@ -129,7 +132,7 @@ func (s *Server) Stop() {
 		return
 	}
 	s.Logger.Println("Stopped server")
-	s.State = "stopping"
+	s.State = "stopped"
 }
 
 func (s *Server) updatePort() {
@@ -214,8 +217,11 @@ func (s *Server) IsRunning() bool {
 	}
 	isrunning := stats["data"].(map[string]interface{})["running"].(bool)
 	if isrunning {
-		s.State = "running"
-		return s.checkPing()
+		if s.checkPing() {
+			s.State = "running"
+			return true
+		}
+		return false
 	}
 	s.State = "stopped"
 	return false
