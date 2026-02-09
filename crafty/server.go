@@ -18,21 +18,22 @@ type fileResponse struct {
 }
 
 type Server struct {
-	Name       string
-	parent     *Crafty
-	InPort     uint16
-	OutPort    uint16
-	AutoOn     bool
-	AutoOff    bool
-	ChangePort bool
-	VoicePort  int
-	id         string
-	Logger     *log.Logger
-	Address    string
-	players    int
-	stopTimer  *time.Timer
-	State      string
-	Handled    bool
+	Name         string
+	parent       *Crafty
+	InPort       uint16
+	OutPort      uint16
+	AutoOn       bool
+	AutoOff      bool
+	ChangePort   bool
+	VoiceInPort  int
+	VoiceOutPort int
+	id           string
+	Logger       *log.Logger
+	Address      string
+	players      int
+	stopTimer    *time.Timer
+	State        string
+	Handled      bool
 }
 
 func NewServer(parent *Crafty, srv jsonServer) *Server {
@@ -42,7 +43,8 @@ func NewServer(parent *Crafty, srv jsonServer) *Server {
 	s.AutoOn = false
 	s.AutoOff = false
 	s.ChangePort = false
-	s.VoicePort = 0
+	s.VoiceInPort = 0
+	s.VoiceOutPort = 0
 
 	s.InPort = srv.Port - 2000
 	s.OutPort = srv.Port
@@ -63,9 +65,6 @@ func NewServer(parent *Crafty, srv jsonServer) *Server {
 	if slices.Contains(options, "player-stop") {
 		s.AutoOff = true
 	}
-	if slices.Contains(options, "update-port") {
-		s.ChangePort = true
-	}
 	if slices.ContainsFunc(options, containsVoice) {
 		idx := slices.IndexFunc(options, containsVoice)
 		if idx == -1 {
@@ -76,14 +75,20 @@ func NewServer(parent *Crafty, srv jsonServer) *Server {
 		if err != nil {
 			s.Logger.Fatalf("Invalid options: %v", options)
 		}
-		s.VoicePort = p
-	}
-	if s.AutoOn || s.AutoOff {
-		if s.ChangePort {
-			s.updatePort()
-		} else {
-			s.InPort = s.OutPort
+		if p == -1 {
+			p = int(s.OutPort)
 		}
+		s.VoiceOutPort = p
+		s.VoiceInPort = p - 2000
+	}
+	if slices.Contains(options, "update-port") {
+		s.ChangePort = true
+	}
+	if s.ChangePort {
+		s.updatePort()
+	} else {
+		s.InPort = s.OutPort
+		s.VoiceInPort = s.VoiceOutPort
 	}
 	s.stopTimer = time.AfterFunc(parent.StopTimeout*time.Minute, func() {
 		s.Stop()
@@ -136,53 +141,12 @@ func (s *Server) Stop() {
 }
 
 func (s *Server) updatePort() {
-	path := "servers/" + s.id + "/server.properties"
-	props := "{\"path\":\"" + path + "\"}"
-	post, err := s.parent.Post("/api/v2/servers/"+s.id+"/files", []byte(props))
-	if err != nil {
-		s.Logger.Println("Can't update port: " + err.Error())
-		return
+	if s.AutoOn || s.AutoOff {
+		s.updateServerProperties()
 	}
-	body := defaultServerProperties
-	if post.StatusCode != 200 {
-		s.Logger.Println("server.properties not found, creating...")
-		s.createProperties()
-	} else {
-		defer post.Body.Close()
-		postBody, err := io.ReadAll(post.Body)
-		if err != nil {
-			s.Logger.Println("Can't read response body: " + err.Error())
-			return
-		}
-		var file fileResponse
-		json.Unmarshal(postBody, &file)
-		body = file.Data
+	if s.VoiceOutPort != 0 {
+		s.updateVoiceProperties()
 	}
-
-	lines := strings.Split(body, "\n")
-	for i, line := range lines {
-		if strings.Contains(line, "server-port=") {
-			lines[i] = "server-port=" + strconv.Itoa(int(s.InPort))
-		}
-	}
-	body = strings.Join(lines, "\n")
-	body = "{\"path\":\"" + path + "\",\"contents\":\"" + strings.ReplaceAll(
-		strings.ReplaceAll(body, "\n", "\\n"), "\\:", "\\\\:") + "\"}"
-	patch, err := s.parent.Patch("/api/v2/servers/"+s.id+"/files", []byte(body))
-	if err != nil {
-		s.Logger.Println("Can't update server.properties: " + err.Error())
-		return
-	}
-	if patch.StatusCode != 200 {
-		s.Logger.Println("Can't update server.properties: " + patch.Status)
-		defer patch.Body.Close()
-		patchBody, err := io.ReadAll(patch.Body)
-		if err != nil {
-			s.Logger.Println("Can't read response body: " + err.Error())
-		}
-		s.Logger.Println(string(patchBody))
-	}
-
 }
 
 func (s *Server) createProperties() {
@@ -272,6 +236,80 @@ func (s *Server) checkPing() bool {
 		return false
 	}
 	return true
+}
+
+func (s *Server) updateServerProperties() {
+	body := s.getFileDefault("server.properties", defaultServerProperties)
+
+	lines := strings.Split(body, "\n")
+	for i, line := range lines {
+		if strings.Contains(line, "server-port=") {
+			lines[i] = "server-port=" + strconv.Itoa(int(s.InPort))
+		}
+		if strings.Contains(line, "query.port=") {
+			lines[i] = "query.port=" + strconv.Itoa(int(s.InPort))
+		}
+	}
+	body = strings.Join(lines, "\n")
+	s.updateFile("server.properties", body)
+}
+
+func (s *Server) updateVoiceProperties() {
+	body := s.getFileDefault("config/voicechat/voicechat-server.properties", "port=")
+	lines := strings.Split(body, "\n")
+	for i, line := range lines {
+		if strings.Contains(line, "port=") {
+			lines[i] = "port=" + strconv.Itoa(s.VoiceInPort)
+		}
+	}
+	body = strings.Join(lines, "\n")
+	s.updateFile("config/voicechat/voicechat-server.properties", body)
+}
+
+func (s *Server) getFileDefault(filename string, def string) string {
+	path := "servers/" + s.id + "/" + filename
+	props := "{\"filename\":\"" + path + "\"}"
+	post, err := s.parent.Post("/api/v2/servers/"+s.id+"/files", []byte(props))
+	if err != nil {
+		s.Logger.Println("Can't update port: " + err.Error())
+		return ""
+	}
+	body := def
+	if post.StatusCode != 200 {
+		s.Logger.Println(filename + " not found, creating...")
+		s.createProperties()
+	} else {
+		defer post.Body.Close()
+		postBody, err := io.ReadAll(post.Body)
+		if err != nil {
+			s.Logger.Println("Can't read response body: " + err.Error())
+			return ""
+		}
+		var file fileResponse
+		json.Unmarshal(postBody, &file)
+		body = file.Data
+	}
+	return body
+}
+
+func (s *Server) updateFile(filename string, body string) {
+	path := "servers/" + s.id + "/" + filename
+	body = "{\"path\":\"" + path + "\",\"contents\":\"" + strings.ReplaceAll(
+		strings.ReplaceAll(body, "\n", "\\n"), "\\:", "\\\\:") + "\"}"
+	patch, err := s.parent.Patch("/api/v2/servers/"+s.id+"/files", []byte(body))
+	if err != nil {
+		s.Logger.Println("Can't update " + filename + ": " + err.Error())
+		return
+	}
+	if patch.StatusCode != 200 {
+		s.Logger.Println("Can't update \"+filename+\"s: " + patch.Status)
+		defer patch.Body.Close()
+		patchBody, err := io.ReadAll(patch.Body)
+		if err != nil {
+			s.Logger.Println("Can't read response body: " + err.Error())
+		}
+		s.Logger.Println(string(patchBody))
+	}
 }
 
 const (

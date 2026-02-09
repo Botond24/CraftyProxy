@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"strconv"
+	"sync"
 
 	"github.com/Botond24/CraftyProxy/crafty"
 	"github.com/Tnze/go-mc/chat"
@@ -29,29 +30,23 @@ func Handle(s *crafty.Server, addr string) {
 	}
 	s.Logger.Println("TCP Proxy server started on port " + strconv.Itoa(int(s.OutPort)))
 	s.Handled = true
-	var udp *net.UDPConn = nil
-	if s.VoicePort != 0 {
+	var udpListener *net.UDPConn = nil
+	if s.VoiceOutPort != 0 {
 		var udpAddr *net.UDPAddr = nil
-		if s.VoicePort == -1 {
-			udpAddr, err = net.ResolveUDPAddr("udp", addr+":"+strconv.Itoa(int(s.OutPort)))
-			if err != nil {
-				log.Fatalf("Error getting udp address: %s\n", err)
-			}
-		} else {
-			udpAddr, err = net.ResolveUDPAddr("udp", addr+":"+strconv.Itoa(s.VoicePort))
-			if err != nil {
-				log.Fatalf("Error getting udp address: %s\n", err)
-			}
+
+		udpAddr, err = net.ResolveUDPAddr("udp", addr+":"+strconv.Itoa(s.VoiceOutPort))
+		if err != nil {
+			log.Fatalf("Error getting udpListener address: %s\n", err)
 		}
-		udp, err = net.ListenUDP("udp", udpAddr)
+		udpListener, err = net.ListenUDP("udp", udpAddr)
 		if err != nil {
 			log.Fatalf("Error starting proxy server: %s\n", err)
 		}
-
+		s.Logger.Println("UDP Proxy server started on port " + strconv.Itoa(s.VoiceOutPort))
 	}
 	for {
-		if udp != nil && s.VoicePort != 0 {
-			go handleUDP(s, udp)
+		if udpListener != nil && s.VoiceOutPort != 0 {
+			go handleUDP(s, udpListener)
 		}
 		conn, err := listen.Accept()
 		if err != nil {
@@ -63,18 +58,22 @@ func Handle(s *crafty.Server, addr string) {
 			break
 		}
 	}
-	if udp != nil {
-		udp.Close()
+	if udpListener != nil {
+		udpListener.Close()
 	}
 	listen.Close()
 	s.Remove()
 }
 
 func handleUDP(s *crafty.Server, udp *net.UDPConn) {
-	return //TODO: figure out the udp proxy
-	/* if s.IsRunning() {
-		forwardUDP(s, udp)
-	}*/
+	if s.IsRunning() {
+		var buf [1500]byte
+		n, addr, err := udp.ReadFromUDP(buf[0:])
+		if err != nil {
+			return
+		}
+		forwardUDP(s, udp, addr, n, buf)
+	}
 }
 
 func handleConnection(s *crafty.Server, conn net.Conn) {
@@ -184,58 +183,44 @@ func forward(s *crafty.Server, conn net.Conn) {
 	return
 }
 
-func forwardUDP(s *crafty.Server, udp *net.UDPConn) {
-	port := s.VoicePort
-	if s.VoicePort == -1 {
-		port = int(s.InPort)
-	}
+var mu sync.Mutex
+var conns = make(map[string]*net.UDPConn)
+
+func forwardUDP(s *crafty.Server, udp *net.UDPConn, clientAddr *net.UDPAddr, n int, b [1500]byte) {
+	port := s.VoiceInPort
 	addr, err := net.ResolveUDPAddr("udp", s.Address+":"+strconv.Itoa(port))
 	if err != nil {
 		s.Logger.Fatalf("Error getting udp address: %s\n", err)
 	}
-	conn, err := net.DialUDP("udp", nil, addr)
-	if err != nil {
-		s.Logger.Fatalf("Error connecting to udp address: %s\n", err)
+	mu.Lock()
+	conn, exists := conns[clientAddr.String()]
+	if !exists {
+		conn, err = net.DialUDP("udp", nil, addr)
+		if err != nil {
+			s.Logger.Fatalf("Error connecting to udp address%s: %s\n", clientAddr, err)
+		}
+		conns[clientAddr.String()] = conn
 	}
-	defer conn.Close()
-	go func() {
-		var buffer [1500]byte
-		s.Logger.Println("Voice connected")
-		for {
-			// Read from server
-			n, a, err := udp.ReadFromUDP(buffer[0:])
-			if err != nil {
+	mu.Unlock()
+	_, err = conn.Write(b[:n])
+	if err != nil {
+		s.Logger.Fatalf("Error writing to udp address %s: %s\n", clientAddr, err)
+	}
 
-				s.Logger.Println("Error reading from udp connection: " + err.Error())
-			}
-			// Relay it to client
-			if a != addr {
-				continue
-			}
-			_, err = conn.Write(buffer[0:n])
+	s.Logger.Println("Voice connected")
+	go func() {
+		buf := make([]byte, 1500)
+		for {
+			n, err := conn.Read(buf)
 			if err != nil {
-				s.Logger.Println("Error writing to udp connection: " + err.Error())
+				s.Logger.Printf("Server read error (%s): %v\n", clientAddr, err)
+				return
+			}
+			_, err = udp.WriteToUDP(buf[:n], clientAddr)
+			if err != nil {
+				s.Logger.Printf("Client write error (%s): %v\n", clientAddr, err)
+				return
 			}
 		}
 	}()
-	go func() {
-		var buffer [1500]byte
-		s.Logger.Println("Voice connected")
-		for {
-			// Read from client
-			n, a, err := conn.ReadFromUDP(buffer[0:])
-			if err != nil {
-				s.Logger.Println("Error reading from udp connection: " + err.Error())
-			}
-			// Relay it to server
-			if a != udp.RemoteAddr() {
-				continue
-			}
-			_, err = udp.Write(buffer[0:n])
-			if err != nil {
-				s.Logger.Println("Error writing to udp connection: " + err.Error())
-			}
-		}
-	}()
-
 }
