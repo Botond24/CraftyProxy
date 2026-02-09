@@ -71,9 +71,10 @@ func Handle(s *crafty.Server, addr string) {
 }
 
 func handleUDP(s *crafty.Server, udp *net.UDPConn) {
-	if s.IsRunning() {
+	return //TODO: figure out the udp proxy
+	/* if s.IsRunning() {
 		forwardUDP(s, udp)
-	}
+	}*/
 }
 
 func handleConnection(s *crafty.Server, conn net.Conn) {
@@ -184,7 +185,11 @@ func forward(s *crafty.Server, conn net.Conn) {
 }
 
 func forwardUDP(s *crafty.Server, udp *net.UDPConn) {
-	addr, err := net.ResolveUDPAddr("udp", s.Address+":"+strconv.Itoa(s.VoicePort))
+	port := s.VoicePort
+	if s.VoicePort == -1 {
+		port = int(s.InPort)
+	}
+	addr, err := net.ResolveUDPAddr("udp", s.Address+":"+strconv.Itoa(port))
 	if err != nil {
 		s.Logger.Fatalf("Error getting udp address: %s\n", err)
 	}
@@ -200,6 +205,7 @@ func forwardUDP(s *crafty.Server, udp *net.UDPConn) {
 			// Read from server
 			n, a, err := udp.ReadFromUDP(buffer[0:])
 			if err != nil {
+
 				s.Logger.Println("Error reading from udp connection: " + err.Error())
 			}
 			// Relay it to client
